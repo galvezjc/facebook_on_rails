@@ -1,0 +1,113 @@
+require 'httparty'
+require 'json'
+require 'pry'
+require 'awesome_print'
+require 'sinatra'
+enable :sessions
+
+
+
+
+
+IDME_HOST= "https://api.id.me"
+CLIENT_ID = "91d4d11302a656d5cfa21711c1d6b337"
+CLIENT_SECRET = "438f95d09be19cb548b6b119ded88905"
+REDIRECT_URI = "http://www.woundedwear.org/registration.php"
+
+get '/' do
+  erb :index
+end
+
+
+get '/verify' do
+  redirect "#{IDME_HOST}/oauth/authorize?client_id=#{CLIENT_ID}&redirect_uri=#{REDIRECT_URI}&response_type=code&scope=military&state=" 
+
+end
+
+
+get '/auth/idme/callback' do
+  session[:auth_code] = params[:code]
+  erb :url_code
+end
+
+get '/access_token' do
+	
+  options = {
+    body: {
+      # this params is the url params im guessing
+      code: session[:auth_code],
+      client_id:CLIENT_ID,
+      client_secret:CLIENT_SECRET,
+      redirect_uri:REDIRECT_URI,
+      grant_type:"authorization_code",
+    }
+  }
+
+  @data = HTTParty.post("#{IDME_HOST}/oauth/token",options)
+  session[:token] = @data['access_token']
+  erb :response
+end
+
+
+
+get '/authenticated' do
+  # this method is better for post requests, you should just do it similar to your IDME_HOST within the url (url params)
+  
+  options = {
+    body: { access_token: session[:token]},
+    headers: {"Accept" => "application/json"}
+  }
+
+  @military = HTTParty.get("#{IDME_HOST}/api/public/v2/military.json",options)
+  erb :authenticated
+end
+
+
+
+
+
+# templates for each page
+
+# this does a get request to /verify since you are clicking on a link
+template :index do
+  "
+  <a href='/verify'>Verify with ID.me</a>
+  "
+end
+
+# this shows all the data and you can query each of the keys
+template :url_code do
+  "
+  <h2> url code </h2>
+  <%= session[:auth_code] %>  
+  <a href='/access_token'> Get the Access token </a>
+  "
+end
+
+template :response do
+  "
+	<h2> Response Data </h2>
+	<ul>
+	  <% @data.each do |key, value| %>
+		  <li> <%=key%>: <%=value%> </li>
+		<% end %>
+	</ul>	
+	#just to show you can grab the access_token
+	<li><%= @data['access_token'] %></li>
+    <a href='/authenticated'>See an authenticated call</a>
+	<a href = '/'> Go Back Home </a>
+	"
+end
+
+# this will show the json response from the call.
+
+template :authenticated do
+  "
+  <h1>Authenticated Screen</h1>
+    <ul>
+      <% @military.each do |key, value| %>
+	   <li> <%=key%>: <%=value%> </li>
+      <%end%>
+    </ul>
+ "	
+end
